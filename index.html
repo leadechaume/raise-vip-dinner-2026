@@ -336,15 +336,23 @@ function escapeHtml(str){
    FETCHERS
    ========================================================= */
 async function fetchAllGuestsCSV(){
-  // CSV export bypasses sheet filters and returns every row
-  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${ALL_GUESTS_GID}`;
+  // gviz endpoint supports CORS from browser. tq=SELECT * bypasses sheet filter views.
+  // (CSV /export endpoint doesn't return CORS headers and is blocked by browsers.)
+  const params = new URLSearchParams({
+    tqx: "out:json",
+    gid: String(ALL_GUESTS_GID),
+    tq: "SELECT *",
+  });
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?${params.toString()}`;
   const res = await fetch(url, { credentials: "omit", redirect: "follow" });
   if(!res.ok) throw new Error(`ALL GUESTS HTTP ${res.status}`);
   const text = await res.text();
   if(text.startsWith("<!DOCTYPE") || text.startsWith("<html")) {
     throw new Error("PRIVATE_SHEET");
   }
-  return parseCSV(text);
+  const m = text.match(/setResponse\(([\s\S]*)\);?\s*$/);
+  if(!m) throw new Error("ALL GUESTS parse error");
+  return gvizToObjects(JSON.parse(m[1]));
 }
 
 async function fetchGvizSheet(name, headerRows){
